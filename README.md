@@ -35,7 +35,7 @@
 
 | Part | File | Owner | Status |
 |------|------|-------|--------|
-| P1 | src/segmentation.py | [name] | Done |
+| P1 | src/segmentation.py | Rawan | Done |
 | P2 | src/eye_hog.py | Noha | Done |
 | P3 | src/eye_ear.py | [name] | Not started |
 | P4 | src/analysis.py | [name] | Not started |
