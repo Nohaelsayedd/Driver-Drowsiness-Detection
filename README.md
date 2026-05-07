@@ -129,3 +129,52 @@ Put it in data/dataset/ so the structure is data/dataset/train/open, data/datase
 Then run:
 python src/train_hog.py
 The new model will be saved to models/eye_hog_svm.pkl
+
+### P3 - dlib EAR Blink Detection (src/dlib_ear.py)
+Calculates Eye Aspect Ratio (EAR) using dlib's 68-point facial landmark predictor.
+Detects blinks by tracking EAR dips below a threshold (~0.2).
+Estimates head pose (yaw/pitch) from landmark geometry.
+
+Output dictionary:
+- success: True or False
+- ear: float (average EAR of both eyes, 0.1-0.4 typical range)
+- ear_left: float (left eye EAR)
+- ear_right: float (right eye EAR)
+- blink_detected: bool (True if blink just occurred)
+- blink_count: int (cumulative blink count)
+- head_pose: tuple (yaw, pitch) in pixels
+- left_eye_pts: numpy array of 6 landmark points
+- right_eye_pts: numpy array of 6 landmark points
+
+Model file needed: models/shape_predictor_68_face_landmarks.dat (download from http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2)
+
+Performance: ~5-8ms per frame
+Known limitation: Accuracy depends on face detection; fails if face not detected by P1.
+EAR threshold of 0.2 works well for most lighting conditions.
+
+---
+
+## How to use P3
+
+from src.dlib_ear import EARDetector
+
+p3 = EARDetector(ear_threshold=0.2)
+
+# After P1 processing
+r3 = p3.process(r1["face_crop"], r1["bbox"])
+
+if r3["success"]:
+    print(r3["ear"])           # 0.1-0.4
+    print(r3["blink_count"])   # int
+    print(r3["blink_detected"]) # bool
+
+---
+
+## Testing files (P3)
+
+### Test on video (src/test_ear.py)
+Tests P1 and P3 together on a video file.
+Put a video in data/ (e.g., data/test_blink_video.mov), then run:
+python src/test_ear.py
+Shows real-time EAR values, blink count, and processing time.
+Press Q to quit.
