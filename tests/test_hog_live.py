@@ -1,15 +1,18 @@
-import cv2
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+"""
+P1 + P2 live webcam test — run from project root: python tests/test_hog_live.py
+Green box = eyes open, Red box = eyes closed. Press Q to quit.
+"""
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 
-from src.segmentation import FaceSegmentor
-from src.eye_hog import EyeStateClassifier
+import cv2
+from segmentation import FaceSegmentor
+from eye_hog import EyeStateClassifier
 
 p1 = FaceSegmentor()
 p2 = EyeStateClassifier()
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 print("Press Q to quit")
 
 while True:
@@ -26,21 +29,17 @@ while True:
     else:
         r2 = p2.process(r1["face_crop"])
         x, y, w, h = r1["bbox"]
-        
         if r2["success"]:
             color = (0, 255, 0) if r2["eye_state"] == "open" else (0, 0, 255)
             cv2.rectangle(display, (x, y), (x+w, y+h), color, 2)
-            cv2.putText(display, f"{r2['eye_state']} {r2['confidence']:.2f}", 
+            cv2.putText(display, f"{r2['eye_state']} {r2['confidence']:.2f}",
                         (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         else:
             cv2.rectangle(display, (x, y), (x+w, y+h), (255, 255, 0), 2)
             cv2.putText(display, "Eyes not detected", (x, y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-    # Resize to a fixed window size
-    display = cv2.resize(display, (800, 600))
-    cv2.imshow("Drowsiness Detection", display)
-
+    cv2.imshow("P1+P2 Test", cv2.resize(display, (800, 600)))
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
