@@ -1,180 +1,185 @@
 ﻿# Driver Drowsiness Detection
-> Working README for team coordination. Will be replaced with proper documentation after full implementation.
+
+A real-time computer vision system that detects driver drowsiness using a webcam. The system monitors eye state, blink rate, eye closure duration, and head pose to produce a continuous drowsiness score and trigger alerts when the driver becomes drowsy or unresponsive.
 
 ---
 
-## Setup (everyone do this once)
-1. Clone the repo
-   git clone https://github.com/Nohaelsayedd/Driver-Drowsiness-Detection.git
+## How It Works
 
-2. Go into the folder
-   cd Driver-Drowsiness-Detection
+The system is a 5-stage pipeline where each part feeds into the next:
 
-3. Create a virtual environment
-   python -m venv venv
+| Part | Module | Description | Output |
+|------|--------|-------------|--------|
+| P1 | `src/segmentation.py` | Detects and crops the face using Haar Cascade. Validates using skin color (HSV + YCrCb). Applies temporal smoothing to handle missed frames. | `face_crop`, `bbox` |
+| P2 | `src/eye_hog.py` | Extracts HOG features from each eye and classifies open/closed using a trained SVM. | `eye_state`, `confidence` |
+| P3 | `src/dlib_ear.py` | Computes Eye Aspect Ratio (EAR) using dlib 68-point landmarks. Detects blinks and estimates head pose (yaw/pitch). | `ear`, `blink_count`, `head_pose` |
+| P4 | `src/analysis.py` | Fuses all signals over time into a drowsiness score (0–1). Runs a state machine: Alert → Drowsy → Critical. | `drowsiness_score`, `state` |
+| P5 | `src/pipeline.py` | Connects all parts in a real-time webcam loop. Draws the overlay, triggers audio alerts, and targets 30 FPS. | Live video window |
 
-4. Activate it
-   Windows: venv\Scripts\activate
-   Mac/Linux: source venv/bin/activate
+### Drowsiness Score Signals
 
-5. Install dependencies
-   pip install -r requirements.txt
+The P4 score is a weighted combination of 5 signals:
 
----
-
-## Rules
-- Only work inside your own file in src/
-- Never push directly to main, create a branch first: git checkout -b your-name-p3
-- Put model files (.pkl, .dat) in models/ but check with the team before pushing large files
-- Never push the data/ folder or your venv/
-- Always run scripts from the project root, not from inside src/
+| Signal | Weight | Description |
+|--------|--------|-------------|
+| EAR score | 25% | Low EAR → high drowsiness |
+| Blink rate | 25% | < 8 blinks/min is drowsy |
+| Eye state (HOG) | 20% | HOG classifier agreement |
+| Sustained closure | 20% | Eyes closed > 0.5s is drowsy, > 2s is critical |
+| Head pose | 10% | Nodding/yawing detection |
 
 ---
 
-## Project Status
+## Setup
 
-| Part | File | Owner | Status |
-|------|------|-------|--------|
-| P1 | src/segmentation.py | Rawan | Done |
-| P2 | src/eye_hog.py | Noha | Done |
-| P3 | src/eye_ear.py | [name] | Not started |
-| P4 | src/analysis.py | [name] | Not started |
-| P5 | main.py | [name] | Not started |
+### 1. Clone the repo
+```
+git clone https://github.com/Nohaelsayedd/Driver-Drowsiness-Detection.git
+cd Driver-Drowsiness-Detection
+```
 
----
+### 2. Create and activate a virtual environment
+```
+python -m venv venv
 
-## What has been implemented
+# Windows
+venv\Scripts\activate
 
-### P1 - Face Segmentation (src/segmentation.py)
-Detects and crops the face from a frame using Haar Cascade.
-Validates the detection using skin color in both HSV and YCrCb color spaces.
-Uses temporal smoothing so if the face is missed for a few frames it reuses the last known position.
+# Mac/Linux
+source venv/bin/activate
+```
 
-Output dictionary:
-- success: True or False
-- face_crop: cropped face image, resized to 224x224, numpy array
-- bbox: (x, y, w, h) position of the face in the original frame
-- skin_mask: binary mask of detected skin pixels
-- debug_frame: original frame with green box drawn around the face
+### 3. Install dependencies
+```
+pip install -r requirements.txt
+```
 
-No model files needed, uses opencv built-in Haar Cascade.
+### 4. Set up model files
 
----
+**P2 model** (HOG SVM) — already in the repo at `models/eye_hog_svm.pkl`.
 
-### P2 - HOG Eye State Classifier (src/eye_hog.py)
-Takes the face_crop from P1 and detects whether the eyes are open or closed.
-Finds the eyes inside the face crop using Haar Cascade.
-Extracts HOG (Histogram of Oriented Gradients) features from each eye.
-Feeds the features into a trained SVM model to classify the eye state.
-If either eye is detected as closed, the overall state is closed.
+**P3 model** (dlib landmarks) — the compressed file is included. Extract it before running:
+```
+python -c "import bz2; open('models/shape_predictor_68_face_landmarks.dat','wb').write(bz2.open('models/shape_predictor_68_face_landmarks.dat.bz2','rb').read())"
+```
 
-Output dictionary:
-- success: True or False
-- eye_state: "open" or "closed"
-- confidence: float between 0.0 and 1.0
-- debug_frame: face crop with colored boxes around detected eyes (green = open, red = closed)
+If the `.dat` file is missing and the `.bz2` is not available, download it from:
+```
+http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+```
+Place it in the `models/` folder and run the extraction command above.
 
-Model file needed: models/eye_hog_svm.pkl (already in the repo, no retraining needed)
-Trained on: https://www.kaggle.com/datasets/arindamxd/eyes-open-closed-dataset
-
-Known limitation: accuracy drops in low lighting conditions. This is expected.
-P3's EAR method is more reliable for lighting, P2 is one signal among many.
+> **Note:** If the dlib model is not found, the system automatically falls back to using the HOG classifier (P2) alone for blink and EAR synthesis. Drowsiness detection still works but is less precise.
 
 ---
 
-## How to use P1 and P2 in your code (P3, P4, P5 read this)
+## Running the System
 
-from src.segmentation import FaceSegmentor
-from src.eye_hog import EyeStateClassifier
+Always run from the project root directory.
 
-p1 = FaceSegmentor()
-p2 = EyeStateClassifier()
+### Full pipeline (main entry point)
+```
+python main.py
+```
 
-# frame is a standard opencv BGR image from cv2.VideoCapture
-r1 = p1.process(frame)
+### Controls (while the window is open)
 
-if r1["success"]:
-    face_crop = r1["face_crop"]   # pass this to p2 and p3
-    bbox = r1["bbox"]             # (x, y, w, h) in original frame
+| Key | Action |
+|-----|--------|
+| `q` / `ESC` | Quit |
+| `r` | Reset the temporal analyzer (clears history) |
+| `s` | Save a screenshot |
 
-    r2 = p2.process(face_crop)
-    if r2["success"]:
-        print(r2["eye_state"])    # "open" or "closed"
-        print(r2["confidence"])   # 0.0 to 1.0
+### Alert behaviour
 
-Always check success before using the output. If success is False, skip that frame.
-
----
-
-## Testing files (P2)
-
-### Test on a static image (src/test_hog.py)
-Tests P1 and P2 together on a single photo.
-Put a face photo in data/ and name it test_face.jpg, then run:
-python src/test_hog.py
-Two windows will open showing the detected face and the eye state with confidence.
-
-### Test on live webcam (src/test_hog_live.py)
-Opens your webcam and runs P1 and P2 in real time.
-Shows one window with a colored box around your face.
-Green box = eyes open, Red box = eyes closed.
-Run:
-python src/test_hog_live.py
-Press Q to quit.
-
-### Retrain the model (src/train_hog.py)
-Only needed if you want to retrain from scratch.
-Download the dataset from https://www.kaggle.com/datasets/arindamxd/eyes-open-closed-dataset
-Put it in data/dataset/ so the structure is data/dataset/train/open, data/dataset/train/closed, etc.
-Then run:
-python src/train_hog.py
-The new model will be saved to models/eye_hog_svm.pkl
-
-### P3 - dlib EAR Blink Detection (src/dlib_ear.py)
-Calculates Eye Aspect Ratio (EAR) using dlib's 68-point facial landmark predictor.
-Detects blinks by tracking EAR dips below a threshold (~0.2).
-Estimates head pose (yaw/pitch) from landmark geometry.
-
-Output dictionary:
-- success: True or False
-- ear: float (average EAR of both eyes, 0.1-0.4 typical range)
-- ear_left: float (left eye EAR)
-- ear_right: float (right eye EAR)
-- blink_detected: bool (True if blink just occurred)
-- blink_count: int (cumulative blink count)
-- head_pose: tuple (yaw, pitch) in pixels
-- left_eye_pts: numpy array of 6 landmark points
-- right_eye_pts: numpy array of 6 landmark points
-
-Model file needed: models/shape_predictor_68_face_landmarks.dat (download from http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2)
-
-Performance: ~5-8ms per frame
-Known limitation: Accuracy depends on face detection; fails if face not detected by P1.
-EAR threshold of 0.2 works well for most lighting conditions.
+| State | Visual | Audio |
+|-------|--------|-------|
+| Alert | Green border + green badge | — |
+| Drowsy | Orange border + yellow badge | 800 Hz beep every 3.5s |
+| Critical | Red border + red badge | 1300 Hz beep every 1.2s |
 
 ---
 
-## How to use P3
+## Project Structure
 
-from src.dlib_ear import EARDetector
-
-p3 = EARDetector(ear_threshold=0.2)
-
-# After P1 processing
-r3 = p3.process(r1["face_crop"], r1["bbox"])
-
-if r3["success"]:
-    print(r3["ear"])           # 0.1-0.4
-    print(r3["blink_count"])   # int
-    print(r3["blink_detected"]) # bool
+```
+Driver-Drowsiness-Detection/
+├── main.py                 ← Run this
+├── requirements.txt
+├── .gitignore
+├── README.md
+│
+├── models/
+│   ├── eye_hog_svm.pkl                            ← P2 trained SVM model
+│   └── shape_predictor_68_face_landmarks.dat.bz2  ← P3 dlib model (extract first)
+│
+├── src/
+│   ├── segmentation.py     ← P1: Face detection & skin validation
+│   ├── eye_hog.py          ← P2: HOG eye state classifier
+│   ├── dlib_ear.py         ← P3: EAR blink detection & head pose
+│   ├── analysis.py         ← P4: Temporal drowsiness scoring
+│   ├── pipeline.py         ← P5: Real-time integration
+│   └── train_hog.py        ← Retrain the P2 SVM model (optional)
+│
+└── tests/
+    ├── test_analysis.py     ← P4 unit tests (11 tests, run offline)
+    ├── test_analysis_live.py← P4 live webcam test with CSV logging
+    ├── test_hog.py          ← P1+P2 test on a static image
+    ├── test_hog_live.py     ← P1+P2 live webcam test
+    └── test_ear.py          ← P1+P3 test on a video file
+```
 
 ---
 
-## Testing files (P3)
+## Running Tests
 
-### Test on video (src/test_ear.py)
-Tests P1 and P3 together on a video file.
-Put a video in data/ (e.g., data/test_blink_video.mov), then run:
-python src/test_ear.py
-Shows real-time EAR values, blink count, and processing time.
-Press Q to quit.
+All tests are run from the project root:
+
+```
+# P4 unit tests (no camera needed)
+python tests/test_analysis.py
+
+# P1+P2 live webcam test
+python tests/test_hog_live.py
+
+# P1+P2 static image test (needs data/test_closed.jpg)
+python tests/test_hog.py
+
+# P4 live webcam test with CSV logging
+python tests/test_analysis_live.py
+
+# P1+P3 video test (needs data/test_blink_video.mov)
+python tests/test_ear.py
+```
+
+---
+
+## Retraining the HOG Model
+
+If you want to retrain the P2 eye classifier from scratch:
+
+1. Download the dataset: https://www.kaggle.com/datasets/arindamxd/eyes-open-closed-dataset
+2. Place it at `data/dataset/` so the structure is:
+   ```
+   data/dataset/train/open/
+   data/dataset/train/closed/
+   data/dataset/test/open/
+   data/dataset/test/closed/
+   ```
+3. Run:
+   ```
+   python src/train_hog.py
+   ```
+   The new model is saved to `models/eye_hog_svm.pkl`.
+
+---
+
+## Team
+
+| Part | Owner |
+|------|-------|
+| P1 — Segmentation | Rawan |
+| P2 — HOG Classifier | Noha |
+| P3 — dlib EAR | Carol |
+| P4 — Temporal Analysis | Hams |
+| P5 — Integration | Jana |
