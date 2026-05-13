@@ -9,7 +9,7 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks.dat")
 
 class EARDetector:
-    def __init__(self, ear_threshold=0.2, blink_frames=3):
+    def __init__(self, ear_threshold=0.22, blink_frames=3):
         self.ear_threshold = ear_threshold
         self.blink_frames = blink_frames
         self.ear_history = []

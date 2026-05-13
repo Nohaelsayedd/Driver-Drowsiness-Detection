@@ -37,10 +37,10 @@ class TemporalAnalyzer:
     def __init__(
         self,
         fps: int = 30,
-        ear_threshold: float = 0.2,
+        ear_threshold: float = 0.22,
         blink_window_sec: float = 5.0,
         sustained_closure_sec: float = 0.5,
-        critical_closure_sec: float = 2.0,
+        critical_closure_sec: float = 1.5,
         blink_rate_normal_min: float = 15,
         blink_rate_drowsy_max: float = 8,
         head_pose_threshold: float = 15.0,
