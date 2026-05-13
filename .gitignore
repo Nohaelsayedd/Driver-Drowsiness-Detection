@@ -6,3 +6,8 @@ __pycache__/
 data/
 models/
 logs/
+*.csv
+screenshots/
+drowsiness_log_*.csv
+drowsiness_video_*.mp4
+screenshot_*.png

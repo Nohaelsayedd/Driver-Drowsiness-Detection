@@ -9,7 +9,7 @@ import cv2
 from segmentation import FaceSegmentor
 from eye_hog import EyeStateClassifier
 
-IMAGE_PATH = "data/test_closed.jpg"
+IMAGE_PATH = "data/closed.jpg"
 
 frame = cv2.imread(IMAGE_PATH)
 if frame is None:
